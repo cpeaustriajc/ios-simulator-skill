@@ -111,7 +111,7 @@ Read [reference.md](reference.md) for all flags. These are the scripts available
 | Build & logs | `build_and_test.py`, `log_monitor.py` |
 | UI navigation | `screen_mapper.py`, `navigator.py`, `gesture.py`, `keyboard.py`, `app_launcher.py` |
 | Testing & debug | `debug_failing_test.py`, `wait_for.py`, `accessibility_audit.py`, `visual_diff.py`, `test_recorder.py`, `app_state_capture.py`, `model_inspector.py`, `sim_health_check.sh` |
-| Env & permissions | `clipboard.py`, `status_bar.py`, `push_notification.py`, `privacy_manager.py` |
+| Env & permissions | `clipboard.py`, `status_bar.py`, `push_notification.py`, `privacy_manager.py`, `keychain_biometric.py` |
 | Device lifecycle | `simctl_boot.py`, `simctl_shutdown.py`, `simctl_create.py`, `simctl_delete.py`, `simctl_erase.py` |
 
 ## Conventions

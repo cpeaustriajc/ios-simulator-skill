@@ -217,6 +217,17 @@ Grant, revoke, or reset TCC permissions (13 services: camera, microphone, photos
 | `--reset` | Reset all |
 | `--list` | Show supported services |
 
+### `keychain_biometric.py`
+Install certs in the simulator keychain and trigger Face ID / Touch ID events from the host.
+
+| Flag | Purpose |
+|------|---------|
+| `--add-root-cert <path>` | Install as a trusted root cert |
+| `--add-cert <path>` | Install as a regular (intermediate/leaf) cert |
+| `--reset-keychain` | Wipe the simulator's keychain |
+| `--biometric <action>` | Post `face-match` / `face-nomatch` / `touch-match` / `touch-nomatch` / `enroll-toggle` |
+| `--list-biometric` | Show supported actions and their notifyutil keys |
+
 ---
 
 ## Device Lifecycle
