@@ -33,6 +33,7 @@ Output Format (default):
     Screen: LoginViewController (45 elements, 7 interactive)
     Buttons: "Login", "Cancel", "Forgot Password"
     TextFields: 2 (0 filled)
+    Text: "Login failed: Could not connect to the server."
     Navigation: NavBar: "Sign In"
     Focusable: 7 elements
 
@@ -41,6 +42,14 @@ Technical Details:
 - Parses IDB's array format: [{ root element with children }]
 - Identifies element types: Button, TextField, NavigationBar, TabBar, etc.
 - Extracts labels from AXLabel, AXValue, and AXUniqueId fields
+
+Caveat — system dialogs are invisible here:
+- idb's tree is app-scoped. System overlays (keychain "Save Password",
+  Location/Notification prompts, share sheet) are owned by SpringBoard and
+  never appear in this output. When a tap appears to "vanish" or the tree
+  looks unexpectedly sparse, suspect a system overlay and screenshot to
+  confirm. The summary surfaces a `Note:` line when the tree is sparse
+  enough to suggest an overlay.
 """
 
 import argparse
@@ -88,6 +97,22 @@ class ScreenMapper:
         "Toolbar",
     }
 
+    # Non-interactive types whose labels are still useful for diagnosing UI state
+    # (error banners, status labels, image captions). Kept separate from
+    # INTERACTIVE_TYPES so we don't accidentally claim they're tappable.
+    LABELLED_TYPES = {
+        "StaticText",
+        "Text",
+        "Image",
+        "Heading",
+    }
+
+    # Heuristic threshold for "tree looks suspiciously empty — system overlay
+    # may be obscuring the app". Tuned against a few real apps; the cost of a
+    # false positive is just an extra Note line.
+    SPARSE_TREE_TOTAL = 5
+    SPARSE_TREE_INTERACTIVE = 1
+
     def __init__(self, udid: str | None = None):
         """
         Initialize screen mapper.
@@ -113,19 +138,33 @@ class ScreenMapper:
         """Analyze accessibility tree for navigation info."""
         analysis = {
             "elements_by_type": defaultdict(list),
+            "labels_by_type": defaultdict(list),
             "total_elements": 0,
             "interactive_elements": 0,
             "text_fields": [],
             "buttons": [],
+            "static_texts": [],
             "navigation": {},
             "screen_name": None,
             "focusable": 0,
+            "possible_system_overlay": False,
         }
 
         self._analyze_recursive(node, analysis, depth)
 
         # Post-process for clean output
         analysis["elements_by_type"] = dict(analysis["elements_by_type"])
+        analysis["labels_by_type"] = dict(analysis["labels_by_type"])
+
+        # Sparse-tree heuristic: when the app's a11y tree comes back nearly
+        # empty, a system overlay (keychain save-password, location/notification
+        # prompt, share sheet) is the most common cause — those dialogs are
+        # owned by SpringBoard and never appear in the app's tree.
+        if (
+            analysis["total_elements"] <= self.SPARSE_TREE_TOTAL
+            or analysis["interactive_elements"] <= self.SPARSE_TREE_INTERACTIVE
+        ):
+            analysis["possible_system_overlay"] = True
 
         return analysis
 
@@ -161,6 +200,16 @@ class ScreenMapper:
                     # Count tab items
                     tab_count = len(node.get("children", []))
                     analysis["navigation"]["tab_count"] = tab_count
+
+            # Track non-interactive but labelled elements (StaticText, Image,
+            # Heading). These hold error banners, status text, captions —
+            # critical for diagnosing UI state without taking a screenshot.
+            elif elem_type in self.LABELLED_TYPES:
+                text = label or value
+                if text:
+                    analysis["labels_by_type"][elem_type].append(text)
+                    if elem_type in ("StaticText", "Text"):
+                        analysis["static_texts"].append(text)
 
             # Track focusable elements
             if node.get("enabled", False) and elem_type in self.INTERACTIVE_TYPES:
@@ -199,6 +248,22 @@ class ScreenMapper:
             filled = sum(1 for f in analysis["text_fields"] if f["has_value"])
             lines.append(f"TextFields: {field_count} ({filled} filled)")
 
+        # Static text summary (1 line) — surface error banners, status labels,
+        # any non-interactive copy that helps diagnose the screen without a
+        # screenshot. Top 5, deduped to keep the line short.
+        if analysis["static_texts"]:
+            seen = []
+            for t in analysis["static_texts"]:
+                if t not in seen:
+                    seen.append(t)
+                if len(seen) >= 5:
+                    break
+            text_list = ", ".join(f'"{self._truncate(t, 80)}"' for t in seen)
+            extra = len(analysis["static_texts"]) - len(seen)
+            if extra > 0:
+                text_list += f" +{extra} more"
+            lines.append(f"Text: {text_list}")
+
         # Navigation summary (1 line)
         nav_parts = []
         if "nav_title" in analysis["navigation"]:
@@ -211,9 +276,20 @@ class ScreenMapper:
         # Focusable count (1 line)
         lines.append(f"Focusable: {analysis['focusable']} elements")
 
+        # System-overlay note — always shown (not gated on --hints) because
+        # if the tree is this sparse, the agent's next move is almost
+        # certainly wrong without this context.
+        if analysis.get("possible_system_overlay"):
+            lines.append(
+                "Note: tree is sparse — a system dialog (keychain save-password, "
+                "location/notification prompt, share sheet) may be obscuring the app. "
+                "System overlays are not in idb's app-scoped tree; "
+                "screenshot to confirm."
+            )
+
         # Verbose mode adds element type breakdown
         if verbose:
-            lines.append("\nElements by type:")
+            lines.append("\nInteractive elements by type:")
             for elem_type, items in analysis["elements_by_type"].items():
                 if items:  # Only show types that exist
                     lines.append(f"  {elem_type}: {len(items)}")
@@ -222,7 +298,23 @@ class ScreenMapper:
                     if len(items) > 3:
                         lines.append(f"    ... +{len(items) - 3} more")
 
+            if analysis["labels_by_type"]:
+                lines.append("\nOther labelled elements:")
+                for elem_type, items in analysis["labels_by_type"].items():
+                    if items:
+                        lines.append(f"  {elem_type}: {len(items)}")
+                        for item in items[:5]:
+                            lines.append(f"    - {self._truncate(item, 120)}")
+                        if len(items) > 5:
+                            lines.append(f"    ... +{len(items) - 5} more")
+
         return "\n".join(lines)
+
+    @staticmethod
+    def _truncate(s: str, n: int) -> str:
+        """Truncate long labels for one-line output."""
+        s = s.replace("\n", " ").strip()
+        return s if len(s) <= n else s[: n - 1] + "…"
 
     def get_navigation_hints(self, analysis: dict) -> list[str]:
         """Generate navigation hints based on screen analysis."""
@@ -242,6 +334,16 @@ class ScreenMapper:
 
         if "tab_count" in analysis.get("navigation", {}):
             hints.append(f"Tab bar available with {analysis['navigation']['tab_count']} tabs")
+
+        # Surface the system-overlay hypothesis prominently — this is the most
+        # common cause of a tap "vanishing" or a tree looking empty.
+        if analysis.get("possible_system_overlay"):
+            hints.append(
+                "If a recent tap appears to have vanished, a system dialog "
+                "(save-password, location, notifications, share sheet) is likely "
+                "obscuring the app. Screenshot to confirm, then dismiss it before "
+                "retrying the tap."
+            )
 
         return hints
 

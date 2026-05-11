@@ -1,6 +1,6 @@
 ---
 name: ios-simulator-skill
-version: 1.5.3
+version: 1.5.4
 description: Build, test, and drive iOS apps on the simulator. Wraps xcodebuild, xcrun simctl, and idb with token-efficient scripts for semantic UI navigation, progressive build output, a11y audits, and simulator lifecycle. Use when working with Xcode projects, .swift/.m/.h files, or anything involving the iOS simulator.
 when_to_use: Activate for iOS/macOS app work — building Xcode projects, running XCTest, interacting with the iOS simulator (tap, type, gesture, screenshot), inspecting Core Data/SwiftData models, auditing accessibility, or managing simulator devices. Trigger phrases include "build the app", "run the tests", "tap the login button", "screenshot the simulator", "why is the build failing", "boot a simulator".
 paths: "**/*.xcodeproj/**, **/*.xcworkspace/**, **/Package.swift, **/*.swift, **/*.m, **/*.h, **/*.xcdatamodeld/**"
@@ -127,7 +127,7 @@ Read [reference.md](reference.md) for all flags. These are the scripts available
 - **"No booted device"** → `simctl_boot.py --name "iPhone 16 Pro" --wait-ready`
 - **Element not found** → run `screen_mapper.py --verbose` to see the full tree; the label may not match what the user said
 - **Build fails with signing error** → `build_and_test.py --get-errors <id>`; signing issues usually need user intervention, don't auto-retry
-- **Tap does nothing** → element may be occluded or offscreen; try `gesture.py --scroll down` then re-map
+- **Tap does nothing / element "vanished"** → first suspect a system dialog (keychain save-password, location/notification prompts, share sheet). These are owned by SpringBoard and **never appear in idb's app-scoped a11y tree**, so `screen_mapper.py` can't see them — it will flag `Note: tree is sparse — a system dialog may be obscuring the app` when this is likely. Screenshot to confirm, dismiss the overlay, then retry. If no overlay, the element may be occluded or offscreen — try `gesture.py --scroll down` then re-map.
 - **Stale UI state** → `app_launcher.py --terminate <bundle>` then relaunch
 - **Race conditions / "I just tapped, why isn't X visible?"** → don't poll yourself; `wait_for.py --element <X> --timeout 5`
 

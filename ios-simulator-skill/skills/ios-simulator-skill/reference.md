@@ -52,12 +52,12 @@ Inspect or modify a Swift Package (standalone `Package.swift` only in v1).
 ## UI Navigation
 
 ### `screen_mapper.py`
-Lists interactive elements on the current screen from the a11y tree. ~10 tokens default output.
+Lists interactive elements on the current screen from the a11y tree. ~10 tokens default output. Also surfaces non-interactive `StaticText` labels (top 5) so error banners and status messages are readable without a screenshot. When the tree comes back near-empty — the usual fingerprint of a system overlay (save-password, location/notification prompt, share sheet) — a `Note:` line warns that the app may be obscured (system dialogs are SpringBoard-owned and never in idb's app-scoped tree).
 
 | Flag | Purpose |
 |------|---------|
-| `--verbose` | Full tree with frames |
-| `--hints` | Include element hints |
+| `--verbose` | Full breakdown — interactive types AND other labelled elements |
+| `--hints` | Include navigation hints (auto-includes overlay hint when relevant) |
 
 ### `navigator.py`
 Find and interact with elements semantically. Preferred over pixel taps.
