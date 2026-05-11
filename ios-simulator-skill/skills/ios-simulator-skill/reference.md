@@ -186,6 +186,19 @@ Parse Core Data `.xcdatamodeld` and SwiftData `@Model` classes from project sour
 | `--show-versions` | List all model versions |
 | `--raw <ModelName>` | Dump raw source for one model |
 
+### `profiler.py`
+Drive `xctrace` to record an Instruments trace and emit a terse summary. Best summarisation for `Time Profiler`, `Allocations`, `Leaks`; other templates record fine but you'll get a path-only result and need to open in Instruments.
+
+| Flag | Purpose |
+|------|---------|
+| `--attach <NAME\|PID>` | Attach to a running process |
+| `--launch <BUNDLE_ID>` | Launch a fresh app and profile it |
+| `--template <name>` | Default: `Time Profiler` |
+| `--duration <N>` | Recording seconds (default 10) |
+| `--keep-trace` | Don't delete the `.trace` bundle after summarising |
+| `--output <path>` | Write the `.trace` here instead of a tempdir |
+| `--list-templates` | List available templates and exit |
+
 ### `crash_log.py`
 Discover and summarise `.ips` / `.crash` reports for simulator apps, optionally symbolicated.
 
