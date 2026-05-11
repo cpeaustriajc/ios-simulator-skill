@@ -108,7 +108,7 @@ Read [reference.md](reference.md) for all flags. These are the scripts available
 
 | Area | Scripts |
 |------|---------|
-| Build & logs | `build_and_test.py`, `log_monitor.py` |
+| Build & logs | `build_and_test.py`, `log_monitor.py`, `spm_manager.py` |
 | UI navigation | `screen_mapper.py`, `navigator.py`, `gesture.py`, `keyboard.py`, `app_launcher.py` |
 | Testing & debug | `debug_failing_test.py`, `wait_for.py`, `accessibility_audit.py`, `visual_diff.py`, `test_recorder.py`, `app_state_capture.py`, `model_inspector.py`, `crash_log.py`, `sim_health_check.sh` |
 | Env & permissions | `clipboard.py`, `status_bar.py`, `push_notification.py`, `privacy_manager.py`, `keychain_biometric.py` |
