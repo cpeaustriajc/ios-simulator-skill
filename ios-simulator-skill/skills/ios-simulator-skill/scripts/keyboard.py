@@ -19,7 +19,7 @@ Key Features:
 
 Usage Examples:
     # Type text into focused field
-    python scripts/keyboard.py --type "hello@example.com" --udid <device-id>
+    python scripts/keyboard.py --text "hello@example.com" --udid <device-id>
 
     # Press return key to submit
     python scripts/keyboard.py --key return --udid <device-id>
@@ -34,7 +34,7 @@ Usage Examples:
     python scripts/keyboard.py --button lock --udid <device-id>
 
     # Type with delay between characters (for animations)
-    python scripts/keyboard.py --type "slow typing" --delay 0.1 --udid <device-id>
+    python scripts/keyboard.py --text "slow typing" --delay 0.1 --udid <device-id>
 
 Output Format:
     Typed: "hello@example.com"
@@ -305,7 +305,7 @@ def main():
     parser = argparse.ArgumentParser(description="Control keyboard and hardware buttons")
 
     # Text input
-    parser.add_argument("--type", help="Type text into current focus")
+    parser.add_argument("--text", "--type", dest="text", help="Type text into current focus")
     parser.add_argument("--slow", action="store_true", help="Type slowly (character by character)")
 
     # Special keys
@@ -351,13 +351,13 @@ def _run_keyboard(args, parser) -> None:
     controller = KeyboardController(udid=udid)
 
     # Execute requested action
-    if args.type:
+    if args.text:
         delay = 0.1 if args.slow else 0.0
-        if controller.type_text(args.type, delay):
+        if controller.type_text(args.text, delay):
             if args.slow:
-                print(f'Typed: "{args.type}" (slowly)')
+                print(f'Typed: "{args.text}" (slowly)')
             else:
-                print(f'Typed: "{args.type}"')
+                print(f'Typed: "{args.text}"')
         else:
             print("Failed to type text")
             sys.exit(1)

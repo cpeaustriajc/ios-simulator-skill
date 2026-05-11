@@ -216,7 +216,7 @@ For the full skill body Claude loads (decision tree + workflows), see [`SKILL.md
 | `screen_mapper.py` | Analyze current screen, list interactive elements | `--verbose` `--hints` |
 | `navigator.py` | Find and interact with elements semantically | `--find-text` `--find-type` `--find-id` `--tap` `--enter-text` |
 | `gesture.py` | Swipes, scrolls, pinches, long press, pull to refresh | `--swipe` `--scroll` `--pinch` `--long-press` `--refresh` |
-| `keyboard.py` | Text input and hardware buttons | `--type` `--key` `--button` `--clear` `--dismiss` |
+| `keyboard.py` | Text input and hardware buttons | `--text` `--key` `--button` `--clear` `--dismiss` |
 | `app_launcher.py` | Launch, terminate, install, deep link apps | `--launch` `--terminate` `--install` `--open-url` `--list` |
 
 </details>

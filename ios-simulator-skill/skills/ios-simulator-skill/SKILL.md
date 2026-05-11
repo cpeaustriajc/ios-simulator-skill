@@ -1,6 +1,6 @@
 ---
 name: ios-simulator-skill
-version: 1.5.2
+version: 1.5.3
 description: Build, test, and drive iOS apps on the simulator. Wraps xcodebuild, xcrun simctl, and idb with token-efficient scripts for semantic UI navigation, progressive build output, a11y audits, and simulator lifecycle. Use when working with Xcode projects, .swift/.m/.h files, or anything involving the iOS simulator.
 when_to_use: Activate for iOS/macOS app work — building Xcode projects, running XCTest, interacting with the iOS simulator (tap, type, gesture, screenshot), inspecting Core Data/SwiftData models, auditing accessibility, or managing simulator devices. Trigger phrases include "build the app", "run the tests", "tap the login button", "screenshot the simulator", "why is the build failing", "boot a simulator".
 paths: "**/*.xcodeproj/**, **/*.xcworkspace/**, **/Package.swift, **/*.swift, **/*.m, **/*.h, **/*.xcdatamodeld/**"
