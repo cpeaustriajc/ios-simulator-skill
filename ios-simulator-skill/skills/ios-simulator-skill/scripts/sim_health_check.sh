@@ -117,19 +117,37 @@ else
 fi
 echo ""
 
-# Check 4: IDB installation
+# Check 4: IDB installation (both companion + client)
 echo -e "${BLUE}[4/8]${NC} Checking IDB (iOS Development Bridge)..."
+IDB_CLIENT_OK=false
+IDB_COMPANION_OK=false
 if command -v idb &> /dev/null; then
     IDB_PATH=$(which idb)
     IDB_VERSION=$(idb --version 2>/dev/null || echo "Unknown")
-    check_passed "IDB is installed"
+    check_passed "fb-idb client found"
     echo "       Path: $IDB_PATH"
     echo "       Version: $IDB_VERSION"
+    IDB_CLIENT_OK=true
 else
-    check_warning "IDB not found in PATH"
-    echo "       IDB is optional but provides advanced UI automation"
-    echo "       Install: https://fbidb.io/docs/installation"
-    echo "       Recommended: brew tap facebook/fb && brew install idb-companion"
+    check_failed "fb-idb client (idb binary) not on PATH"
+    echo "       Required for screen_mapper, navigator, gesture, keyboard, wait_for"
+    echo "       Install: pipx install --python python3.13 fb-idb"
+fi
+
+if command -v idb_companion &> /dev/null; then
+    check_passed "idb-companion daemon installed"
+    IDB_COMPANION_OK=true
+else
+    check_warning "idb-companion daemon not on PATH"
+    echo "       The fb-idb client needs the companion to talk to the simulator."
+    echo "       Install: brew tap facebook/fb && brew install idb-companion"
+fi
+
+if ! $IDB_CLIENT_OK || ! $IDB_COMPANION_OK; then
+    echo ""
+    echo "       Full install recipe (both pieces):"
+    echo "         brew tap facebook/fb && brew install idb-companion"
+    echo "         pipx install --python python3.13 fb-idb"
 fi
 echo ""
 

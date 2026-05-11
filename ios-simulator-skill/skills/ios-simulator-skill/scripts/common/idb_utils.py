@@ -18,6 +18,64 @@ import json
 import subprocess
 import sys
 
+from .errors import SkillError
+
+IDB_NOT_INSTALLED_HINT = (
+    "fb-idb client is not on PATH. Install BOTH the brew companion daemon and "
+    "the pipx CLI client; see README Prerequisites."
+)
+IDB_RECOVERY_CMD = (
+    "brew tap facebook/fb && brew install idb-companion && "
+    "pipx install --python python3.13 fb-idb"
+)
+
+
+def idb_not_installed_error(cause: Exception | None = None) -> SkillError:
+    """Build a SkillError for a missing `idb` binary, with a consistent recovery hint."""
+    err = SkillError(
+        "IDB_NOT_INSTALLED",
+        "idb (fb-idb client) is required for this operation but was not found on PATH.",
+        hint=IDB_NOT_INSTALLED_HINT,
+        recovery_cmd=IDB_RECOVERY_CMD,
+    )
+    if cause is not None:
+        err.__cause__ = cause
+    return err
+
+
+def run_idb(
+    args: list[str],
+    *,
+    capture_output: bool = True,
+    text: bool = True,
+    check: bool = False,
+    timeout: float | None = None,
+    udid: str | None = None,
+) -> subprocess.CompletedProcess:
+    """
+    Run an `idb` subcommand, raising a structured SkillError if idb is missing.
+
+    `args` should NOT include the leading "idb" — this wrapper prepends it and,
+    when `udid` is given, appends `--udid <udid>`.
+
+    Why: every script that shells out to idb hit a raw FileNotFoundError traceback
+    when the binary wasn't installed. Centralising the FileNotFoundError → SkillError
+    translation keeps the agent-facing envelope consistent.
+    """
+    cmd = ["idb", *args]
+    if udid:
+        cmd.extend(["--udid", udid])
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=capture_output,
+            text=text,
+            check=check,
+            timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        raise idb_not_installed_error(exc) from exc
+
 
 def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict:
     """
@@ -32,63 +90,47 @@ def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict
 
     Returns:
         Root element of accessibility tree as dict.
-        Structure: {
-            "type": "Window",
-            "AXLabel": "App Name",
-            "frame": {"x": 0, "y": 0, "width": 390, "height": 844},
-            "children": [...]
-        }
 
     Raises:
-        SystemExit: If IDB command fails or returns invalid JSON
-
-    Example:
-        tree = get_accessibility_tree("UDID123")
-        # Root is Window element with all children nested
+        SkillError: with code IDB_NOT_INSTALLED (no idb binary), IDB_CONNECT_FAILED
+            (idb ran but failed), or UNKNOWN (JSON decode failed).
     """
-    cmd = ["idb", "ui", "describe-all", "--json"]
+    sub_args = ["ui", "describe-all", "--json"]
     if nested:
-        cmd.append("--nested")
-    if udid:
-        cmd.extend(["--udid", udid])
+        sub_args.append("--nested")
+
+    result = run_idb(sub_args, udid=udid)
+    if result.returncode != 0:
+        stderr = result.stderr or ""
+        # Detect Python 3.14 incompatibility (asyncio.get_event_loop) — issue #16.
+        if "no current event loop" in stderr or "There is no current event loop" in stderr:
+            py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+            raise SkillError(
+                "ENV_MISSING",
+                f"fb-idb is incompatible with Python {py_ver} "
+                "(asyncio.get_event_loop raises RuntimeError on 3.14+).",
+                hint="Reinstall fb-idb against Python 3.13 or 3.12.",
+                recovery_cmd="pipx install --force --python python3.13 fb-idb",
+            )
+        raise SkillError(
+            "IDB_CONNECT_FAILED",
+            f"idb describe-all failed: {stderr.strip() or 'no stderr'}",
+            hint="Confirm idb-companion is running and the simulator is booted.",
+        )
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         tree_data = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise SkillError(
+            "UNKNOWN",
+            "idb returned invalid JSON for accessibility tree.",
+            hint="Re-run with the simulator focused and ready.",
+        ) from exc
 
-        # IDB returns array format, extract first element (root)
-        if isinstance(tree_data, list) and len(tree_data) > 0:
-            return tree_data[0]
-        return tree_data
-    except subprocess.CalledProcessError as e:
-        _emit_idb_error(e.stderr or "")
-        sys.exit(1)
-    except json.JSONDecodeError:
-        print("Error: Invalid JSON from idb", file=sys.stderr)
-        sys.exit(1)
-
-
-def _emit_idb_error(stderr: str) -> None:
-    """
-    Emit a human-readable error for a failed idb invocation.
-
-    Detects the Python 3.14 incompatibility (asyncio.get_event_loop) and
-    surfaces an actionable remediation instead of a bare traceback.
-
-    Tracking: issue #16.
-    """
-    if "no current event loop" in stderr or "There is no current event loop" in stderr:
-        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
-        print(
-            "Error: fb-idb is incompatible with Python "
-            f"{py_ver} (asyncio.get_event_loop raises RuntimeError on 3.14+).\n"
-            "       Reinstall idb against Python 3.13 or 3.12:\n"
-            "         pipx install --force --python python3.13 fb-idb\n"
-            "       Tracking: https://github.com/conorluddy/ios-simulator-skill/issues/16",
-            file=sys.stderr,
-        )
-        return
-    print(f"Error: Failed to get accessibility tree: {stderr}", file=sys.stderr)
+    # IDB returns array format, extract first element (root)
+    if isinstance(tree_data, list) and len(tree_data) > 0:
+        return tree_data[0]
+    return tree_data
 
 
 def flatten_tree(node: dict, depth: int = 0, elements: list[dict] | None = None) -> list[dict]:
@@ -110,19 +152,6 @@ def flatten_tree(node: dict, depth: int = 0, elements: list[dict] | None = None)
 
     Returns:
         Flat list of elements, each with "depth" key indicating nesting level.
-        Structure of each element: {
-            "type": "Button",
-            "AXLabel": "Login",
-            "frame": {...},
-            "depth": 2,
-            ...
-        }
-
-    Example:
-        tree = get_accessibility_tree()
-        flat = flatten_tree(tree)
-        for elem in flat:
-            print(f"{'  ' * elem['depth']}{elem.get('type')}: {elem.get('AXLabel')}")
     """
     if elements is None:
         elements = []
@@ -154,11 +183,6 @@ def count_elements(node: dict) -> int:
 
     Returns:
         Total element count including root and all descendants
-
-    Example:
-        tree = get_accessibility_tree()
-        total = count_elements(tree)
-        print(f"Screen has {total} elements")
     """
     count = 1
     for child in node.get("children", []):
@@ -170,24 +194,15 @@ def get_screen_size(udid: str | None = None) -> tuple[int, int]:
     """
     Get screen dimensions from accessibility tree.
 
-    Extracts the screen size from the root element's frame. Useful for
-    gesture calculations and coordinate normalization.
-
-    Used by:
-    - gesture.py - Gesture positioning
-    - Potentially: screenshot positioning, screen-aware scaling
+    Used by gesture.py to position swipes. Falls back to iPhone 14 defaults
+    if the tree cannot be retrieved (e.g., idb missing) — callers that need
+    a hard failure should call get_accessibility_tree directly.
 
     Args:
         udid: Device UDID (uses booted if None)
 
     Returns:
-        (width, height) tuple. Defaults to (390, 844) if detection fails
-        or tree cannot be accessed.
-
-    Example:
-        width, height = get_screen_size()
-        center_x = width // 2
-        center_y = height // 2
+        (width, height) tuple. Defaults to (390, 844) if detection fails.
     """
     DEFAULT_WIDTH = 390  # iPhone 14
     DEFAULT_HEIGHT = 844
@@ -198,6 +213,6 @@ def get_screen_size(udid: str | None = None) -> tuple[int, int]:
         width = int(frame.get("width", DEFAULT_WIDTH))
         height = int(frame.get("height", DEFAULT_HEIGHT))
         return (width, height)
-    except Exception:
-        # Silently fall back to defaults if tree access fails
+    except (SkillError, Exception):
+        # Silently fall back to defaults if tree access fails.
         return (DEFAULT_WIDTH, DEFAULT_HEIGHT)

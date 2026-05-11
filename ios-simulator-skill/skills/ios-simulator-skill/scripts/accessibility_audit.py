@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from common import flatten_tree, get_accessibility_tree, resolve_udid
+from common.errors import SkillError, emit_error
 
 
 @dataclass
@@ -240,18 +241,27 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve UDID with auto-detection
     try:
         udid = resolve_udid(args.udid)
     except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        sys.exit(
+            emit_error(
+                SkillError(
+                    "NO_BOOTED_SIM",
+                    str(e),
+                    hint="Boot a simulator first or set $SIMCTL_UDID.",
+                    recovery_cmd='xcrun simctl boot "iPhone 16 Pro"',
+                ),
+                json_mode=args.verbose,
+            )
+        )
 
-    # Perform audit
     auditor = AccessibilityAuditor(udid=udid)
 
     try:
         result = auditor.audit(verbose=args.verbose)
+    except SkillError as e:
+        sys.exit(emit_error(e, json_mode=args.verbose))
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)

@@ -204,6 +204,54 @@ class BuildRunner:
             print(f"Warning: Could not auto-detect simulator: {e}", file=sys.stderr)
             return "generic/platform=iOS Simulator"
 
+    def get_build_settings(self) -> dict[str, str]:
+        """
+        Return the resolved build settings (BUILT_PRODUCTS_DIR / FULL_PRODUCT_NAME /
+        PRODUCT_BUNDLE_IDENTIFIER / OBJROOT) for the current scheme.
+
+        Used after a successful build to surface the .app path, the bundle ID,
+        and the DerivedData directory — so callers can install + launch without
+        a `find ... -name '*.app'` shuffle, and so we can warn if a stale
+        DerivedData hash is silently in use.
+
+        Returns an empty dict on failure.
+        """
+        if not self.scheme:
+            return {}
+
+        cmd = ["xcodebuild", "-showBuildSettings", "-json"]
+        if self.workspace_path:
+            cmd.extend(["-workspace", self.workspace_path])
+        elif self.project_path:
+            cmd.extend(["-project", self.project_path])
+        else:
+            return {}
+        cmd.extend(
+            [
+                "-scheme",
+                self.scheme,
+                "-configuration",
+                self.configuration,
+                "-destination",
+                self.get_simulator_destination(),
+            ]
+        )
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            import json
+
+            data = json.loads(result.stdout)
+        except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError):
+            return {}
+
+        # `-showBuildSettings -json` returns a list of targets — the first entry
+        # is the scheme's primary target; that's what we want.
+        if not isinstance(data, list) or not data:
+            return {}
+        first = data[0]
+        return first.get("buildSettings", {}) or {}
+
     def build(self, clean: bool = False) -> tuple[bool, str, str]:
         """
         Build the project.

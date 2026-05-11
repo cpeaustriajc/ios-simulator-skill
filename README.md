@@ -128,8 +128,37 @@ Restart Claude Code. The skill auto-loads when you open iOS files (`.xcodeproj`,
 | 🍎 macOS 12+ | |
 | 🛠️ Xcode CLT | `xcode-select --install` |
 | 🐍 Python 3.12+ | |
-| 🤖 IDB | Required for UI navigation, screenshots, gestures: `brew tap facebook/fb && brew install idb-companion` |
+| 🤖 IDB (two parts) | See below — needs **both** the brew companion daemon **and** the pipx CLI client |
 | 🖼️ Pillow | Only for `visual_diff.py`: `pip3 install pillow` |
+
+#### Installing IDB
+
+The UI-navigation scripts (`screen_mapper.py`, `navigator.py`, `gesture.py`,
+`keyboard.py`, `accessibility_audit.py`, `wait_for.py`) shell out to the `idb`
+binary. IDB is **two** components — you need both:
+
+1. **`idb-companion`** — Swift daemon, installed via Homebrew.
+2. **`fb-idb`** — Python CLI client (the `idb` binary), installed via pipx.
+
+```bash
+# 1. Companion daemon
+brew tap facebook/fb
+brew install idb-companion
+
+# 2. Python client — must run on Python 3.12 or 3.13.
+#    fb-idb calls asyncio.get_event_loop(), which raises on Python 3.14+.
+#    Pin the interpreter even if your system Python is newer:
+pipx install --python python3.13 fb-idb
+
+# 3. Verify
+idb --version
+bash ~/.claude/skills/ios-simulator-skill/scripts/sim_health_check.sh
+```
+
+> **Last verified install combo:** macOS 15, `idb-companion` 1.1.x via Homebrew,
+> `fb-idb` 1.1.x via `pipx --python python3.13`. The Python 3.14 incompatibility
+> is tracked in [#16](https://github.com/cpeaustriajc/ios-simulator-skill/issues/16) —
+> if `sim_health_check.sh` warns about it, follow its `pipx --python python3.13` recipe.
 
 > **Just want build tooling, no IDB?** See [xclaude-plugin](https://github.com/conorluddy/xclaude-plugin) — same `xcodebuild` wrapper without the simulator scripts.
 

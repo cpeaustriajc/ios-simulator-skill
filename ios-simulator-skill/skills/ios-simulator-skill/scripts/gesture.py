@@ -65,9 +65,11 @@ import time
 from common import (
     get_device_screen_size,
     get_screen_size,
+    idb_not_installed_error,
     resolve_udid,
     transform_screenshot_coords,
 )
+from common.errors import SkillError, emit_error
 
 
 class GestureController:
@@ -146,6 +148,8 @@ class GestureController:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -189,6 +193,8 @@ class GestureController:
             # Simulate hold with delay
             time.sleep(duration)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -300,12 +306,22 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve UDID with auto-detection
+    try:
+        _run_gesture(args, parser)
+    except SkillError as e:
+        sys.exit(emit_error(e))
+
+
+def _run_gesture(args, parser) -> None:
     try:
         udid = resolve_udid(args.udid)
     except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        raise SkillError(
+            "NO_BOOTED_SIM",
+            str(e),
+            hint="Boot a simulator first or set $SIMCTL_UDID.",
+            recovery_cmd='xcrun simctl boot "iPhone 16 Pro"',
+        ) from e
 
     controller = GestureController(udid=udid)
 

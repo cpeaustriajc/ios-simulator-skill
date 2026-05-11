@@ -70,7 +70,8 @@ import subprocess
 import sys
 import time
 
-from common import resolve_udid
+from common import idb_not_installed_error, resolve_udid
+from common.errors import SkillError, emit_error
 
 
 class KeyboardController:
@@ -137,6 +138,8 @@ class KeyboardController:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -170,6 +173,8 @@ class KeyboardController:
                 if count > 1:
                     time.sleep(0.1)  # Small delay for multiple presses
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -205,6 +210,8 @@ class KeyboardController:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -229,6 +236,8 @@ class KeyboardController:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -322,12 +331,22 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve UDID with auto-detection
+    try:
+        _run_keyboard(args, parser)
+    except SkillError as e:
+        sys.exit(emit_error(e))
+
+
+def _run_keyboard(args, parser) -> None:
     try:
         udid = resolve_udid(args.udid)
     except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        raise SkillError(
+            "NO_BOOTED_SIM",
+            str(e),
+            hint="Boot a simulator first or set $SIMCTL_UDID.",
+            recovery_cmd='xcrun simctl boot "iPhone 16 Pro"',
+        ) from e
 
     controller = KeyboardController(udid=udid)
 

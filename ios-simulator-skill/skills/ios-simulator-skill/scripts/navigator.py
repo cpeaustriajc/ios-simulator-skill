@@ -65,9 +65,11 @@ from common import (
     get_accessibility_tree,
     get_device_screen_size,
     get_screen_size,
+    idb_not_installed_error,
     resolve_udid,
     transform_screenshot_coords,
 )
+from common.errors import SkillError, emit_error
 
 
 @dataclass
@@ -230,6 +232,8 @@ class Navigator:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -345,6 +349,8 @@ class Navigator:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -376,6 +382,8 @@ class Navigator:
         try:
             subprocess.run(cmd, capture_output=True, check=True)
             return True
+        except FileNotFoundError as exc:
+            raise idb_not_installed_error(exc) from exc
         except subprocess.CalledProcessError:
             return False
 
@@ -485,12 +493,22 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve UDID with auto-detection
+    try:
+        _run_navigator(args)
+    except SkillError as e:
+        sys.exit(emit_error(e))
+
+
+def _run_navigator(args) -> None:
     try:
         udid = resolve_udid(args.udid)
     except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        raise SkillError(
+            "NO_BOOTED_SIM",
+            str(e),
+            hint="Boot a simulator first or set $SIMCTL_UDID.",
+            recovery_cmd='xcrun simctl boot "iPhone 16 Pro"',
+        ) from e
 
     navigator = Navigator(udid=udid)
 

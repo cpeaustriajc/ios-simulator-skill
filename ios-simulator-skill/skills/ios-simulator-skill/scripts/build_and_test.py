@@ -35,11 +35,69 @@ Usage Examples:
 """
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
 # Import our modular components
 from xcode import BuildRunner, OutputFormatter, XCResultCache, XCResultParser
+
+
+def _resolve_target_udid(simulator_name: str | None) -> str:
+    """Pick the simctl target — "booted" by default, or `--simulator <name>`."""
+    return simulator_name or "booted"
+
+
+def _install_and_launch(
+    *,
+    udid_or_booted: str,
+    app_path: str,
+    bundle_id: str | None,
+    launch: bool,
+) -> tuple[str | None, str | None]:
+    """
+    Install (and optionally launch) the built .app via simctl.
+
+    Returns (install_status, launch_status). Status strings are agent-friendly
+    one-liners — success or a short error message. Never raises.
+    """
+    install_status: str | None = None
+    launch_status: str | None = None
+    try:
+        result = subprocess.run(
+            ["xcrun", "simctl", "install", udid_or_booted, app_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            install_status = f"Installed: {app_path}"
+        else:
+            install_status = f"Install failed: {result.stderr.strip() or 'simctl install non-zero'}"
+            return (install_status, None)
+    except FileNotFoundError:
+        return ("Install failed: xcrun not on PATH", None)
+
+    if launch and bundle_id:
+        try:
+            result = subprocess.run(
+                ["xcrun", "simctl", "launch", udid_or_booted, bundle_id],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                launch_status = f"Launched: {bundle_id}"
+            else:
+                launch_status = (
+                    f"Launch failed: {result.stderr.strip() or 'simctl launch non-zero'}"
+                )
+        except FileNotFoundError:
+            launch_status = "Launch failed: xcrun not on PATH"
+    elif launch and not bundle_id:
+        launch_status = "Launch skipped: bundle id not resolved from build settings"
+
+    return (install_status, launch_status)
 
 
 def main():
@@ -81,7 +139,28 @@ Examples:
     build_group.add_argument("--simulator", help="Simulator name (default: iPhone 15)")
     build_group.add_argument("--clean", action="store_true", help="Clean before building")
     build_group.add_argument("--test", action="store_true", help="Run tests")
+    build_group.add_argument(
+        "--build-only",
+        action="store_true",
+        help=(
+            "Explicit alias for build-only mode. "
+            "Equivalent to omitting --test (which is the default)."
+        ),
+    )
     build_group.add_argument("--suite", help="Specific test suite to run")
+    build_group.add_argument(
+        "--install",
+        action="store_true",
+        help=(
+            "After a successful build, install the .app onto the booted "
+            "(or --simulator) simulator."
+        ),
+    )
+    build_group.add_argument(
+        "--install-and-launch",
+        action="store_true",
+        help="--install plus `simctl launch` of the resolved bundle ID.",
+    )
 
     # Progressive disclosure arguments
     disclosure_group = parser.add_argument_group("Progressive Disclosure Options")
@@ -235,6 +314,17 @@ Examples:
         cache=cache,
     )
 
+    # Validate flag combos
+    if args.test and (args.install or args.install_and_launch):
+        print(
+            "Error: --install / --install-and-launch are only valid with build mode",
+            file=sys.stderr,
+        )
+        return 1
+    if args.test and args.build_only:
+        print("Error: --build-only and --test are mutually exclusive", file=sys.stderr)
+        return 1
+
     # Execute build or test
     if args.test:
         success, xcresult_id, stderr = builder.test(test_suite=args.suite)
@@ -253,6 +343,47 @@ Examples:
     xcresult_path = cache.get_path(xcresult_id) if xcresult_id else None
     parser = XCResultParser(xcresult_path, stderr=stderr)
     error_count, warning_count = parser.count_issues()
+
+    # Resolve build artifacts (.app path, bundle id, DerivedData) on success.
+    # We do this in build mode only — test mode runs xctest, not a packaged app.
+    build_artifacts: dict[str, str] = {}
+    install_status: str | None = None
+    launch_status: str | None = None
+    if success and not args.test:
+        settings = builder.get_build_settings()
+        built_products_dir = settings.get("BUILT_PRODUCTS_DIR", "")
+        product_name = settings.get("FULL_PRODUCT_NAME", "")
+        bundle_id = settings.get("PRODUCT_BUNDLE_IDENTIFIER", "")
+        # OBJROOT (e.g. .../DerivedData/<Hash>/Build/Intermediates.noindex) is the
+        # closest thing xcodebuild exposes to "which DerivedData hash am I using".
+        # Trim to the DerivedData root for a more useful surface.
+        obj_root = settings.get("OBJROOT", "")
+        derived_data_root = ""
+        if obj_root and "/DerivedData/" in obj_root:
+            head, _, tail = obj_root.partition("/DerivedData/")
+            hash_dir = tail.split("/", 1)[0]
+            derived_data_root = f"{head}/DerivedData/{hash_dir}"
+
+        if built_products_dir and product_name:
+            from pathlib import Path as _Path
+
+            built_app_path = str(_Path(built_products_dir) / product_name)
+            build_artifacts["built_app_path"] = built_app_path
+        if bundle_id:
+            build_artifacts["bundle_identifier"] = bundle_id
+        if derived_data_root:
+            build_artifacts["derived_data_path"] = derived_data_root
+
+        # Handle install / install-and-launch.
+        do_install = args.install or args.install_and_launch
+        do_launch = args.install_and_launch
+        if do_install and build_artifacts.get("built_app_path"):
+            install_status, launch_status = _install_and_launch(
+                udid_or_booted=_resolve_target_udid(args.simulator),
+                app_path=build_artifacts["built_app_path"],
+                bundle_id=build_artifacts.get("bundle_identifier"),
+                launch=do_launch,
+            )
 
     # Format output
     status = "SUCCESS" if success else "FAILED"
@@ -291,6 +422,19 @@ Examples:
             test_info=test_info,
         )
         print(output)
+        # Always surface the DerivedData path in verbose mode (fix #5).
+        if build_artifacts:
+            print()
+            if build_artifacts.get("built_app_path"):
+                print(f"App: {build_artifacts['built_app_path']}")
+            if build_artifacts.get("bundle_identifier"):
+                print(f"Bundle ID: {build_artifacts['bundle_identifier']}")
+            if build_artifacts.get("derived_data_path"):
+                print(f"DerivedData: {build_artifacts['derived_data_path']}")
+        if install_status:
+            print(install_status)
+        if launch_status:
+            print(launch_status)
     elif args.json:
         # JSON mode
         data = {
@@ -301,6 +445,12 @@ Examples:
         }
         if test_info:
             data["test_info"] = test_info
+        if build_artifacts:
+            data.update(build_artifacts)
+        if install_status:
+            data["install_status"] = install_status
+        if launch_status:
+            data["launch_status"] = launch_status
         if not success:
             if errors:
                 data["errors"] = errors[:10]
@@ -324,6 +474,16 @@ Examples:
             failed_tests=failed_tests,
         )
         print(output)
+        # Surface artifacts inline for the build → install → launch loop (fix #3).
+        # One terse line each, after the build status line.
+        if build_artifacts.get("built_app_path"):
+            print(f"App: {build_artifacts['built_app_path']}")
+        if build_artifacts.get("bundle_identifier"):
+            print(f"Bundle ID: {build_artifacts['bundle_identifier']}")
+        if install_status:
+            print(install_status)
+        if launch_status:
+            print(launch_status)
 
     # Exit with appropriate code
     return 0 if success else 1

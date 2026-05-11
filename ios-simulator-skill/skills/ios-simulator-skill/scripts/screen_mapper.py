@@ -50,6 +50,7 @@ import sys
 from collections import defaultdict
 
 from common import get_accessibility_tree, resolve_udid
+from common.errors import SkillError, emit_error
 
 
 class ScreenMapper:
@@ -258,34 +259,35 @@ def main():
 
     args = parser.parse_args()
 
-    # Resolve UDID with auto-detection
     try:
-        udid = resolve_udid(args.udid)
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+        try:
+            udid = resolve_udid(args.udid)
+        except RuntimeError as e:
+            raise SkillError(
+                "NO_BOOTED_SIM",
+                str(e),
+                hint="Boot a simulator first or set $SIMCTL_UDID.",
+                recovery_cmd='xcrun simctl boot "iPhone 16 Pro"',
+            ) from e
 
-    # Create mapper and analyze
-    mapper = ScreenMapper(udid=udid)
-    tree = mapper.get_accessibility_tree()
-    analysis = mapper.analyze_tree(tree)
+        mapper = ScreenMapper(udid=udid)
+        tree = mapper.get_accessibility_tree()
+        analysis = mapper.analyze_tree(tree)
 
-    # Output based on format
-    if args.json:
-        # Full JSON (verbose)
-        print(json.dumps(analysis, indent=2, default=str))
-    else:
-        # Token-efficient summary (default)
-        summary = mapper.format_summary(analysis, verbose=args.verbose)
-        print(summary)
+        if args.json:
+            print(json.dumps(analysis, indent=2, default=str))
+        else:
+            summary = mapper.format_summary(analysis, verbose=args.verbose)
+            print(summary)
 
-        # Add hints if requested
-        if args.hints:
-            hints = mapper.get_navigation_hints(analysis)
-            if hints:
-                print("\nHints:")
-                for hint in hints:
-                    print(f"  - {hint}")
+            if args.hints:
+                hints = mapper.get_navigation_hints(analysis)
+                if hints:
+                    print("\nHints:")
+                    for hint in hints:
+                        print(f"  - {hint}")
+    except SkillError as e:
+        sys.exit(emit_error(e, json_mode=args.json))
 
 
 if __name__ == "__main__":
