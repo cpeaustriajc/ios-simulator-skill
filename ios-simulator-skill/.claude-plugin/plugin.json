@@ -1,12 +1,18 @@
 {
   "name": "ios-simulator-skill",
   "version": "1.5.0",
-  "description": "22 production-ready scripts for iOS app testing, building, and automation. Provides semantic UI navigation, build automation, accessibility testing, and simulator lifecycle management.",
+  "description": "28 production-ready scripts for iOS app testing, building, and automation. Provides semantic UI navigation, build automation, accessibility testing, and simulator lifecycle management.",
   "author": {
-    "name": "Conor Luddy"
+    "name": "CJ Austria"
   },
+  "contributors": [
+    {
+      "name": "Conor Luddy",
+      "url": "https://github.com/conorluddy"
+    }
+  ],
   "license": "MIT",
-  "homepage": "https://github.com/conorluddy/ios-simulator-skill",
-  "repository": "https://github.com/conorluddy/ios-simulator-skill",
+  "homepage": "https://github.com/cpeaustriajc/ios-simulator-skill",
+  "repository": "https://github.com/cpeaustriajc/ios-simulator-skill",
   "keywords": ["ios", "simulator", "xcode", "testing", "accessibility", "automation"]
 }

@@ -11,9 +11,9 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-3776ab.svg?logo=python&logoColor=white)](https://www.python.org)
 [![macOS](https://img.shields.io/badge/macOS-12+-black.svg?logo=apple)](https://developer.apple.com)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Skill-D97757.svg)](https://code.claude.com/docs/en/skills)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/conorluddy/ios-simulator-skill)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cpeaustriajc/ios-simulator-skill)
 
-[**Install**](#-install) · [**Quick Start**](#-quick-start) · [**Scripts**](#-scripts-at-a-glance) · [**Why**](#-why-it-works) · [**SKILL.md**](ios-simulator-skill/SKILL.md)
+[**Install**](#-install) · [**Quick Start**](#-quick-start) · [**Scripts**](#-scripts-at-a-glance) · [**Why**](#-why-it-works) · [**SKILL.md**](ios-simulator-skill/skills/ios-simulator-skill/SKILL.md)
 
 </div>
 
@@ -103,19 +103,19 @@ claude evals run evals/evals.json --skill ios-simulator-skill
 ### Plugin marketplace (recommended)
 
 ```
-/plugin marketplace add conorluddy/ios-simulator-skill
-/plugin install ios-simulator-skill@conorluddy
+/plugin marketplace add cpeaustriajc/ios-simulator-skill
+/plugin install ios-simulator-skill@cpeaustriajc
 ```
 
 ### Git clone
 
 ```bash
 # Personal — all your projects
-git clone https://github.com/conorluddy/ios-simulator-skill.git \
+git clone https://github.com/cpeaustriajc/ios-simulator-skill.git \
   ~/.claude/skills/ios-simulator-skill
 
 # Project-scoped
-git clone https://github.com/conorluddy/ios-simulator-skill.git \
+git clone https://github.com/cpeaustriajc/ios-simulator-skill.git \
   .claude/skills/ios-simulator-skill
 ```
 
@@ -268,8 +268,8 @@ PRs welcome — please check existing issues first and keep changes scoped.
 
 ### Made for the people who actually have to debug iOS apps at 11pm.
 
-**MIT** · [Issues](https://github.com/conorluddy/ios-simulator-skill/issues) · [Discussions](https://github.com/conorluddy/ios-simulator-skill/discussions)
+**MIT** · [Issues](https://github.com/cpeaustriajc/ios-simulator-skill/issues) · [Discussions](https://github.com/cpeaustriajc/ios-simulator-skill/discussions) · Forked from [conorluddy/ios-simulator-skill](https://github.com/conorluddy/ios-simulator-skill)
 
-If this saved you an evening, [⭐ a star](https://github.com/conorluddy/ios-simulator-skill) goes a long way.
+If this saved you an evening, [⭐ a star](https://github.com/cpeaustriajc/ios-simulator-skill) goes a long way.
 
 </div>
