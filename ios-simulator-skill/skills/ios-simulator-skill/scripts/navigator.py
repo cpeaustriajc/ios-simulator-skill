@@ -64,6 +64,7 @@ from common import (
     flatten_tree,
     get_accessibility_tree,
     get_device_screen_size,
+    get_screen_size,
     resolve_udid,
     transform_screenshot_coords,
 )
@@ -195,6 +196,140 @@ class Navigator:
             return matches[index]
 
         return None
+
+    def _swipe(self, direction: str, distance_ratio: float = 0.6) -> bool:
+        """
+        Perform a single directional swipe via idb.
+
+        Used to drive scroll-into-view. Mirrors the convention in gesture.py
+        (which we intentionally don't import to keep navigator.py self-contained):
+        direction="up" scrolls content upward (reveals items below the fold).
+
+        Args:
+            direction: "up" or "down" (vertical only — list scrolling).
+            distance_ratio: Fraction of screen height to swipe (0.0-1.0).
+
+        Returns:
+            True on idb success, False otherwise.
+        """
+        width, height = get_screen_size(self.udid)
+        center_x = width // 2
+        # Place swipe path in the middle 60% so we don't catch nav bars / home indicator.
+        if direction == "up":
+            start = (center_x, int(height * 0.75))
+            end = (center_x, int(height * (0.75 - distance_ratio)))
+        elif direction == "down":
+            start = (center_x, int(height * 0.25))
+            end = (center_x, int(height * (0.25 + distance_ratio)))
+        else:
+            return False
+
+        cmd = ["idb", "ui", "swipe", str(start[0]), str(start[1]), str(end[0]), str(end[1])]
+        if self.udid:
+            cmd.extend(["--udid", self.udid])
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    def _is_visible(self, element: Element) -> bool:
+        """
+        Check whether element center is within the root window frame.
+
+        Uses the cached tree's root frame as the visible viewport. Elements
+        with zero-area frames are treated as not visible.
+        """
+        frame = element.frame or {}
+        if not frame or float(frame.get("width", 0)) <= 0 or float(frame.get("height", 0)) <= 0:
+            return False
+
+        width, height = get_screen_size(self.udid)
+        cx, cy = element.center
+        return 0 <= cx < width and 0 <= cy < height
+
+    def scroll_into_view(
+        self,
+        text: str | None = None,
+        element_type: str | None = None,
+        identifier: str | None = None,
+        index: int = 0,
+        fuzzy: bool = True,
+        max_attempts: int = 5,
+    ) -> tuple[Element | None, str]:
+        """
+        Scroll the screen until the target element is found and visible.
+
+        Algorithm:
+        - Look for the element on the current screen. If found and visible, return it.
+        - If found but off-screen, swipe in the direction that brings it into view.
+        - If not found at all, default to swiping up (revealing content below the
+          fold) — list views typically virtualize off-screen rows out of the a11y
+          tree, so absence is the common signal for "scroll further down".
+        - Refresh the accessibility tree between attempts. Cap at max_attempts.
+
+        Args:
+            text/element_type/identifier/index/fuzzy: Forwarded to find_element.
+            max_attempts: Maximum scroll iterations (default 5).
+
+        Returns:
+            (element, message). element is None if exhausted without a visible match.
+        """
+        last_state = None
+        for attempt in range(max_attempts + 1):
+            element = self.find_element(
+                text=text,
+                element_type=element_type,
+                identifier=identifier,
+                index=index,
+                fuzzy=fuzzy,
+            )
+
+            if element is not None and self._is_visible(element):
+                return (element, f"Scrolled into view after {attempt} swipe(s)")
+
+            if attempt == max_attempts:
+                break
+
+            # Decide direction.
+            if element is None:
+                direction = "up"  # reveal content below the fold
+                state = "missing"
+            else:
+                _width, height = get_screen_size(self.udid)
+                _, cy = element.center
+                if cy >= height:
+                    direction = "up"
+                    state = "below"
+                elif cy < 0:
+                    direction = "down"
+                    state = "above"
+                else:
+                    # Horizontally off-screen — we don't support sideways scroll
+                    # in v1; bail out rather than thrashing.
+                    return (
+                        None,
+                        "Element is horizontally off-screen; horizontal scroll not supported",
+                    )
+
+            # Detect no-progress when the element IS in the tree but its position
+            # didn't change after a swipe — usually means a non-scrollable container.
+            # We don't apply this to state="missing" because virtualized list rows
+            # legitimately remain absent until we've scrolled close enough.
+            if state in ("below", "above") and state == last_state and attempt > 0:
+                return (
+                    None,
+                    f"No scroll progress after {attempt} attempts (state={state})",
+                )
+            last_state = state
+
+            if not self._swipe(direction):
+                return (None, f"Swipe failed on attempt {attempt}")
+
+            # Invalidate cached tree so the next find_element re-reads from idb.
+            self._tree_cache = None
+
+        return (None, f"Element not visible after {max_attempts} scroll attempts")
 
     def tap(self, element: Element) -> bool:
         """Tap on an element."""
@@ -336,6 +471,17 @@ def main():
         help="Device UDID (auto-detects booted simulator if not provided)",
     )
     parser.add_argument("--list", action="store_true", help="List all tappable elements")
+    parser.add_argument(
+        "--scroll-into-view",
+        action="store_true",
+        help="Scroll until the target element is visible before tapping",
+    )
+    parser.add_argument(
+        "--scroll-attempts",
+        type=int,
+        default=5,
+        help="Maximum scroll iterations when --scroll-into-view is set (default: 5)",
+    )
 
     args = parser.parse_args()
 
@@ -409,13 +555,31 @@ def main():
         text = args.find_text or args.find_exact
         fuzzy = args.find_text is not None
 
-        success, message = navigator.find_and_tap(
-            text=text, element_type=args.find_type, identifier=args.find_id, index=args.index
-        )
+        if args.scroll_into_view:
+            element, scroll_msg = navigator.scroll_into_view(
+                text=text,
+                element_type=args.find_type,
+                identifier=args.find_id,
+                index=args.index,
+                fuzzy=fuzzy,
+                max_attempts=args.scroll_attempts,
+            )
+            if element is None:
+                print(scroll_msg)
+                sys.exit(1)
+            if navigator.tap(element):
+                print(f"Tapped: {element.description} at {element.center} ({scroll_msg})")
+            else:
+                print(f"Failed to tap: {element.description}")
+                sys.exit(1)
+        else:
+            success, message = navigator.find_and_tap(
+                text=text, element_type=args.find_type, identifier=args.find_id, index=args.index
+            )
 
-        print(message)
-        if not success:
-            sys.exit(1)
+            print(message)
+            if not success:
+                sys.exit(1)
 
     # Find and enter text
     elif args.enter_text:
