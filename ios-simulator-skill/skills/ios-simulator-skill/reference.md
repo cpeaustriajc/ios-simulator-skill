@@ -174,6 +174,18 @@ Parse Core Data `.xcdatamodeld` and SwiftData `@Model` classes from project sour
 | `--show-versions` | List all model versions |
 | `--raw <ModelName>` | Dump raw source for one model |
 
+### `crash_log.py`
+Discover and summarise `.ips` / `.crash` reports for simulator apps, optionally symbolicated.
+
+| Flag | Purpose |
+|------|---------|
+| `--app <bundle-id-or-proc>` | Filter to one app |
+| `--last <Nm\|Nh\|Nd>` | Window relative to now (e.g. `1h`, `7d`) |
+| `--limit N` | Cap reports summarised (default 5, most recent first) |
+| `--symbolicate --dsym <path>` | Resolve frames via `atos` (`--binary` disambiguates multi-arch dSYMs) |
+| `--list` | Only list discovered files, no parse |
+| `--verbose` | Dump full crashed-thread frame list |
+
 ### `sim_health_check.sh`
 Verifies macOS, Xcode, `simctl`, `idb`, Python. Run first if anything looks off.
 
