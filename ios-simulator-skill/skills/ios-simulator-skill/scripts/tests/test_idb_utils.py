@@ -15,8 +15,8 @@ from unittest import mock
 # Make `scripts/` importable so `common.idb_utils` resolves.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common import idb_utils  # noqa: E402
-from common.errors import SkillError  # noqa: E402
+from common import idb_utils
+from common.errors import SkillError
 
 
 def test_run_idb_raises_skillerror_when_binary_missing():
