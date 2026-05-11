@@ -61,11 +61,34 @@ def get_accessibility_tree(udid: str | None = None, nested: bool = True) -> dict
             return tree_data[0]
         return tree_data
     except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to get accessibility tree: {e.stderr}", file=sys.stderr)
+        _emit_idb_error(e.stderr or "")
         sys.exit(1)
     except json.JSONDecodeError:
         print("Error: Invalid JSON from idb", file=sys.stderr)
         sys.exit(1)
+
+
+def _emit_idb_error(stderr: str) -> None:
+    """
+    Emit a human-readable error for a failed idb invocation.
+
+    Detects the Python 3.14 incompatibility (asyncio.get_event_loop) and
+    surfaces an actionable remediation instead of a bare traceback.
+
+    Tracking: issue #16.
+    """
+    if "no current event loop" in stderr or "There is no current event loop" in stderr:
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        print(
+            "Error: fb-idb is incompatible with Python "
+            f"{py_ver} (asyncio.get_event_loop raises RuntimeError on 3.14+).\n"
+            "       Reinstall idb against Python 3.13 or 3.12:\n"
+            "         pipx install --force --python python3.13 fb-idb\n"
+            "       Tracking: https://github.com/conorluddy/ios-simulator-skill/issues/16",
+            file=sys.stderr,
+        )
+        return
+    print(f"Error: Failed to get accessibility tree: {stderr}", file=sys.stderr)
 
 
 def flatten_tree(node: dict, depth: int = 0, elements: list[dict] | None = None) -> list[dict]:

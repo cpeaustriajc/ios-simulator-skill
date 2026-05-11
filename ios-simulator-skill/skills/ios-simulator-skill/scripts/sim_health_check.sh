@@ -144,6 +144,16 @@ if command -v python3 &> /dev/null; then
     else
         check_passed "Python $PYTHON_MAJOR.$PYTHON_MINOR (>= 3.12 required)"
     fi
+
+    # IDB compatibility check: fb-idb's CLI uses asyncio.get_event_loop(),
+    # which raises RuntimeError on Python 3.14+. Issue #16.
+    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 14 ]; then
+        check_warning "Python $PYTHON_MAJOR.$PYTHON_MINOR detected — fb-idb is incompatible with Python 3.14+"
+        echo "       fb-idb's CLI calls asyncio.get_event_loop() which fails on 3.14."
+        echo "       Workaround: install idb via pipx with Python 3.13 or 3.12:"
+        echo "         pipx install --python python3.13 fb-idb"
+        echo "       Tracking: https://github.com/conorluddy/ios-simulator-skill/issues/16"
+    fi
 else
     check_failed "Python 3 not found"
     echo "       Python 3.12+ is required for testing scripts"
