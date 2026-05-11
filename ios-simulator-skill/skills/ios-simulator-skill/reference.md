@@ -35,6 +35,18 @@ Stream or capture Console/`os_log` output with filtering and dedup.
 | `--duration <seconds>` | Capture for N seconds then exit |
 | `--output <path>` | Write to file |
 
+### `spm_manager.py`
+Inspect or modify a Swift Package (standalone `Package.swift` only in v1).
+
+| Flag | Purpose |
+|------|---------|
+| `--package-path <dir>` | Directory containing `Package.swift` (default: cwd) |
+| (default) | `swift package show-dependencies` — one-line summary |
+| `--verbose` | Full indented dependency tree |
+| `--describe` | `swift package describe` (targets + products) |
+| `--resolve` | State-mutating: write `Package.resolved` |
+| `--update` | State-mutating: update dependencies (`--package <name>` scopes) |
+
 ---
 
 ## UI Navigation
